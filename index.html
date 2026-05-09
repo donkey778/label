@@ -564,19 +564,37 @@ function expandRange(start, end, exStart, exEnd) {
     ranges.push({ idx, lo: Math.min(s.num, e.num), hi: Math.max(s.num, e.num), prefix: s.prefix, pad: s.pad });
   }
 
-  // 총 개수 체크
-  let total = 1;
-  for (const r of ranges) total *= (r.hi - r.lo + 1);
-  if (total > 500) return { ok: false, reason: '한 번에 500개까지만 (' + total + '개)' };
-
   // 전체 목록 생성
   const list = [];
   if (ranges.length === 1) {
     const r = ranges[0];
-    for (let n = r.lo; n <= r.hi; n++) {
-      const parts = [...start];
-      parts[r.idx] = r.prefix + String(n).padStart(r.pad, '0');
-      list.push(parts.join('-'));
+    // x0y 패턴 감지 (예: 101~608 → 백의자리 1~6 × 일의자리 1~8)
+    const startNum = r.lo;
+    const endNum = r.hi;
+    const startHundred = Math.floor(startNum / 100);
+    const endHundred = Math.floor(endNum / 100);
+    const startOnes = startNum % 10;
+    const endOnes = endNum % 10;
+    const startTens = Math.floor((startNum % 100) / 10);
+    const endTens = Math.floor((endNum % 100) / 10);
+
+    if (startHundred !== endHundred && startTens === 0 && endTens === 0 && startOnes >= 1 && endOnes <= 8) {
+      // 줄 단위 확장: 백의자리 × 일의자리
+      for (let h = startHundred; h <= endHundred; h++) {
+        for (let o = startOnes; o <= endOnes; o++) {
+          const num = h * 100 + o;
+          const parts = [...start];
+          parts[r.idx] = r.prefix + String(num).padStart(r.pad, '0');
+          list.push(parts.join('-'));
+        }
+      }
+    } else {
+      // 일반 순차 확장
+      for (let n = r.lo; n <= r.hi; n++) {
+        const parts = [...start];
+        parts[r.idx] = r.prefix + String(n).padStart(r.pad, '0');
+        list.push(parts.join('-'));
+      }
     }
   } else {
     // 2개 세그먼트 조합
@@ -591,6 +609,9 @@ function expandRange(start, end, exStart, exEnd) {
     }
   }
 
+  // 총 개수 체크
+  if (list.length > 500) return { ok: false, reason: '한 번에 500개까지만 (' + list.length + '개)' };
+
   // 제외 처리
   if (exStart && exEnd && exStart.every(s => s) && exEnd.every(s => s)) {
     const exResult = expandRange(exStart, exEnd, null, null);
@@ -602,7 +623,6 @@ function expandRange(start, end, exStart, exEnd) {
   }
 
   return { ok: true, locations: list, excluded: 0 };
-  return { ok: true, locations: list };
 }
 
 // ---- 단일 모드 ----
